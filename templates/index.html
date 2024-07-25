@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Title</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css"
+    />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+          Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow-y: scroll;
+      }
+      main {
+        display: flex;
+        justify-content: space-between;
+        position: relative;
+        height: calc(100vh - 80px);
+        padding-right: 30px;
+        overflow-y: hidden;
+      }
+      aside {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        width: 30%;
+        overflow-y: scroll;
+        height: 100%;
+      }
+
+      #map {
+        width: 70%;
+        height: 650px;
+        position: sticky;
+        top: 0;
+        right: 0;
+      }
+      header {
+        display: flex;
+        justify-content: flex-end;
+        height: 80px;
+      }
+
+      header > div {
+        width: 60%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .orderDiv {
+        border-bottom: 2px solid black;
+        padding: 30px;
+      }
+
+      button {
+        background: rgb(79, 124, 193);
+        padding: 10px 20px;
+        border: 0;
+        color: white;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      .buttonStyle {
+        border: 1px solid rgb(79, 124, 193);
+        background: inherit;
+        color: rgb(79, 124, 193);
+        font-weight: 900;
+        margin-top: 10px;
+      }
+      .greenBtn {
+        visibility: hidden;
+      }
+      .hidden {
+        visibility: hidden;
+      }
+      .visible {
+        visibility: visible;
+      }
+      a {
+        font-weight: 700;
+        /* color: black;
+        text-decoration: none; */
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Панель оператора</h1>
+        <button id="help">Поддержка</button>
+      </div>
+    </header>
+    <main>
+      <aside id="aside"></aside>
+      <div id="map"></div>
+    </main>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.min.js"></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js"
+      integrity="sha512-xi/RZRIF/S0hJ+yJJYuZ5yk6/8pCiRlEXZzoguSMl+vk2i3m6UjUO/WcZ11blRL/O+rnj94JRGwt/CHbc9+6EA=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+    <script
+      type="text/javascript"
+      src="https://cdn.jsdelivr.net/npm/toastify-js"
+    ></script>
+
+    <script>
+      window.addEventListener(
+        "load",
+        function () {
+          top.postMessage({ hideSpinner: true }, "*");
+        },
+        false
+      );
+       let check_data = {{ data | safe }};
+      console.log(check_data);
+      let time_data = [];
+
+      var socket = io();
+
+      let map;
+
+      map = L.map("map").setView([49.02834029386961, 31.416361086882517], 3);
+      var layerGroup = L.layerGroup().addTo(map);
+
+      // Add base tiles (e.g., OpenStreetMap)
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      const orderContainer = document.getElementById("aside");
+      document.getElementById("help").addEventListener("click", () => {
+        window.open("https://t.me/poster_check_bot", "_blank");
+      });
+
+      function renderElements() {
+        orderContainer.innerHTML = "";
+        for (let i = 0; i < check_data.length; i++) {
+          const orderDiv = document.createElement("div");
+          orderDiv.classList.add("order-details");
+
+          const orderNumber = document.createElement("p");
+          const strongNumber = document.createElement("strong");
+          strongNumber.textContent = `${check_data[i].transaction_id || "-"}`;
+          orderNumber.textContent = `Номер чека: `;
+          orderNumber.appendChild(strongNumber);
+          orderDiv.appendChild(orderNumber);
+          orderDiv.classList.add("orderDiv");
+
+          const name = document.createElement("p");
+          const strongName = document.createElement("strong");
+          strongName.textContent = `${check_data[i].courier_name || "-"}`;
+          name.textContent = `Имя: `;
+          name.appendChild(strongName);
+          orderDiv.appendChild(name);
+
+          const address = document.createElement("p");
+          const strongAddress = document.createElement("strong");
+          strongAddress.textContent = `${
+            check_data[i].address1 && check_data[i].address2
+              ? `${check_data[i].address1}, ${check_data[i].address2}`
+              : "-"
+          }`;
+          address.textContent = `Адрес: `;
+          address.appendChild(strongAddress);
+          orderDiv.appendChild(address);
+
+          const lastUpdate = document.createElement("p");
+          const strongLastUpdate = document.createElement("strong");
+          strongLastUpdate.textContent = `${check_data[i].lastUpdate || "-"}`;
+          lastUpdate.textContent = `Последнее обновление: `;
+          lastUpdate.appendChild(strongLastUpdate);
+          orderDiv.appendChild(lastUpdate);
+
+          const liveUpdate = document.createElement("p");
+          const strongLive = document.createElement("strong");
+
+          // Find the corresponding time_data entry using a for loop and if-else
+          let liveData = "-";
+          for (let j = 0; j < time_data.length; j++) {
+            if (time_data[j].crId == i) {
+              liveData = time_data[j].live || "-";
+              break;
+            }
+          }
+          strongLive.textContent = liveData;
+          liveUpdate.textContent = `Осталось времени: `;
+          liveUpdate.appendChild(strongLive);
+          orderDiv.appendChild(liveUpdate);
+
+          const coordinates = document.createElement("p");
+          const strongCoordinates = document.createElement("strong");
+          strongCoordinates.textContent = `${
+            `${check_data[i].courier_lat}, ${check_data[i].courier_long}` || "-"
+          }`;
+          coordinates.textContent = `Координаты: `;
+          coordinates.appendChild(strongCoordinates);
+          orderDiv.appendChild(coordinates);
+
+          const button2 = document.createElement("button");
+          button2.id = check_data[i].latlng;
+          button2.textContent = `Центрировать на курьере`;
+          button2.style.width = "100%";
+          button2.style.background = "green";
+          button2.classList.add("locationBtn");
+          button2.id = `${check_data[i].courier_lat},${
+            check_data[i].courier_long || ""
+          }`;
+          orderDiv.appendChild(button2);
+
+          const button = document.createElement("button");
+          button.textContent = `Запросить геолокацию и трансляцию`;
+          button.style.width = "100%";
+          button.classList.add("buttonStyle");
+          button.id = check_data[i].courier_login.split("@")[0];
+          button.classList.add("questionBtn");
+          orderDiv.appendChild(button);
+
+          orderContainer.appendChild(orderDiv);
+        }
+      }
+
+      renderElements();
+      const buttons1 = document.querySelectorAll(".buttonStyle");
+      const buttons2 = document.querySelectorAll(".locationBtn");
+      check_data.map((item, idx) => {
+        var marker = new L.Marker([item.courier_lat, item.courier_long]);
+        marker.bindPopup(item.courier_name);
+        marker.addTo(layerGroup);
+      });
+
+      // buttons2.forEach((button2) => {
+      //   button2.addEventListener("click", () => {
+      //     console.log("btnid", button2.id);
+      //     map.setView(button2.id.split(",").map(Number), 14);
+      //   });
+      // });
+      orderContainer.addEventListener("click", (event) => {
+        if (event.target.classList.contains("locationBtn")) {
+          const button2 = event.target;
+          console.log("btnid", button2.id);
+          map.setView(button2.id.split(",").map(Number), 14);
+        }
+      });
+      orderContainer.addEventListener("click", (event) => {
+        if (event.target.classList.contains("questionBtn")) {
+          const button1 = event.target;
+          let userId;
+          for (let i = 0; i < check_data.length; i++) {
+            const item = check_data[i];
+            const login = item && item.courier_login; // Проверяем наличие item перед обращением к courier_login
+            if (login && login.split("@")[0] === button1.id) {
+              userId = item;
+              break;
+            }
+          }
+          //  console.log(button1);
+          socket.emit("get_location", {
+            chat_id: `${button1.id}`,
+          });
+          const courierName = userId && userId.courier_name;
+          Toastify({
+            text: courierName
+              ? `Мы запросили геолокацию у курьера ${courierName}`
+              : "Не удалось получить геолокацию от курьера",
+            className: "info",
+            // style: {
+            //   background: "linear-gradient(to right, #00b09b, #96c93d)",
+            // },
+          }).showToast();
+        }
+      });
+
+      // buttons1.forEach((button1) => {
+      //   button1.addEventListener("click", () => {
+      //     let userId;
+      //     for (let i = 0; i < check_data.length; i++) {
+      //       const item = check_data[i];
+      //       const login = item && item.courier_login; // Проверяем наличие item перед обращением к courier_login
+      //       if (login && login.split("@")[0] === button1.id) {
+      //         userId = item;
+      //         break;
+      //       }
+      //     }
+      //     //  console.log(button1);
+      //     socket.emit("get_location", {
+      //       chat_id: `${button1.id}`,
+      //     });
+      //     const courierName = userId && userId.courier_name;
+      //     Toastify({
+      //       text: courierName
+      //         ? `Мы запросили геолокацию у курьера ${courierName}`
+      //         : "Не удалось получить геолокацию от курьера",
+      //       className: "info",
+      //       // style: {
+      //       //   background: "linear-gradient(to right, #00b09b, #96c93d)",
+      //       // },
+      //     }).showToast();
+      //   });
+      // });
+
+      socket.on("location", (data) => {
+        console.log("lc_data", data);
+        Toastify({
+          text: "Курьер отправил место",
+          className: "success",
+          style: {
+            background: "#52be4f",
+          },
+        }).showToast();
+        layerGroup.clearLayers();
+        var marker = new L.Marker([data.latitude, data.longitude]);
+        marker.addTo(layerGroup);
+        check_data.map((item, idx) => {
+          var marker = new L.Marker([item.courier_lat, item.courier_long]);
+          marker.bindPopup(item.courier_name);
+          marker.addTo(layerGroup);
+        });
+
+        const courierIdxs = check_data.reduce((acc, item, idx) => {
+          if (item.courier_login.split("@")[0] == data.courier_id) {
+            acc.push(idx);
+          }
+          return acc;
+        }, []);
+
+        courierIdxs.forEach((courierIdx) => {
+          marker.bindPopup(check_data[courierIdx].courier_name);
+
+          check_data[
+            courierIdx
+          ].coordinates = `${data.latitude}, ${data.longitude}`;
+          check_data[courierIdx].lastUpdate = `00:00:00`;
+          buttons2[courierIdx].id = `${data.latitude},${data.longitude}`;
+          check_data[courierIdx].latlng = `${data.latitude},${data.longitude}`;
+
+          // Update the live value only if it exists in the data received from the socket
+          if (data.live_period) {
+            // Calculate hours, minutes, and seconds
+            const livePeriod = data.live_period;
+            const hours = Math.floor(livePeriod / 3600);
+            const minutes = Math.floor((livePeriod % 3600) / 60);
+            const seconds = livePeriod % 60;
+
+            // Format hours, minutes, and seconds to be two digits
+            const formattedHours = String(hours).padStart(2, "0");
+            const formattedMinutes = String(minutes).padStart(2, "0");
+            const formattedSeconds = String(seconds).padStart(2, "0");
+
+            // Set the formatted time string
+            const objectTime = {
+              crId: courierIdx,
+              live: `${formattedHours}:${formattedMinutes}:${formattedSeconds}`,
+            };
+            let hasChild = false;
+
+            // Using a for loop and if-else
+            for (let i = 0; i < time_data.length; i++) {
+              if (time_data[i].crId == courierIdx) {
+                hasChild = true;
+                break; // Exit the loop once we find a match
+              }
+            }
+
+            if (!hasChild) {
+              time_data.push(objectTime);
+            }
+            console.log("tm", time_data);
+          }
+        });
+
+        renderElements();
+      });
+
+      function startCountdown() {
+  setInterval(() => {
+    time_data.forEach((entry) => {
+      if (!entry.hasOwnProperty("live")) {
+        return;
+      }
+
+      let [hours, minutes, seconds] = entry.live.split(":").map(Number);
+
+      // Decrement the seconds
+      seconds -= 1;
+
+      // Handle underflow of seconds
+      if (seconds < 0) {
+        seconds = 59;
+        minutes -= 1;
+
+        // Handle underflow of minutes
+        if (minutes < 0) {
+          minutes = 59;
+          hours -= 1;
+
+          // Ensure the countdown stops at 00:00:00
+          if (hours < 0) {
+            hours = 0;
+            minutes = 0;
+            seconds = 0;
+          }
+        }
+      }
+
+      // Format hours, minutes, and seconds to be two digits
+      const formattedHours = String(hours).padStart(2, "0");
+      const formattedMinutes = String(minutes).padStart(2, "0");
+      const formattedSeconds = String(seconds).padStart(2, "0");
+
+      // Update the live time in time_data
+      entry.live = `${formattedHours}:${formattedMinutes}:${formattedSeconds}`;
+    });
+
+    renderElements();
+  }, 1000); // Execute every second
+}
+
+      // Start the countdown once when the script is loaded
+      startCountdown();
+
+      // Start the countdown once when the script is loaded
+      startCountdown();
+
+      function addSecondsToTime(time, seconds) {
+        if (!time) return;
+        let parts = time.split(":");
+        let date = new Date();
+        date.setHours(parseInt(parts[0]));
+        date.setMinutes(parseInt(parts[1]));
+        date.setSeconds(parseInt(parts[2]) + seconds);
+        let newTime = date.toTimeString().split(" ")[0];
+        return newTime;
+      }
+
+      // Function to update the lastUpdate value for all objects in the array
+      function updateLastUpdate() {
+        check_data.forEach((obj) => {
+          obj.lastUpdate = addSecondsToTime(obj.lastUpdate, 5);
+        });
+        renderElements();
+      }
+
+      // Set interval to update lastUpdate every 5 seconds
+      setInterval(updateLastUpdate, 5000);
+
+      socket.on("update_data", (data) => {
+        console.log("updated", check_data);
+        renderElements();
+      });
+    </script>
+  </body>
+</html>
