@@ -15,6 +15,19 @@ CORS(app)  # Разрешить CORS для всех маршрутов
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 
+@app.route('/test', methods=['GET'])
+def test():
+    url = "https://echo.free.beeceptor.com"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Проверка на наличие ошибок HTTP
+        data = response.json()  # Предполагая, что ответ в формате JSON
+        return jsonify(data), 200
+    except requests.exceptions.RequestException as e:
+        print(f"error")
+        return jsonify({"error": str(e)}), 500
+
+
 # OAuth2
 @app.route('/auth', methods=['GET'])
 def auth():
