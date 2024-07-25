@@ -46,6 +46,7 @@ def auth():
     }
 
     response = requests.post(url, data=data)
+    print(response.json())
 
     if response.status_code == 200:
         json_data = response.json()
