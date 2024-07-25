@@ -573,7 +573,9 @@ def manage_platform_pos(company_name):
     # --------------------------------------------------------------------->
     url = f"https://joinposter.com/api/dash.getTransactions?token={token}&include_delivery=true&status=1&service_mode=3"
     request_2 = requests.get(url)
+    print(request_2)
     response_2 = request_2.json()
+    print(response_2)
     response_2 = [item for item in response_2['response'] if item['processing_status'] == '40']
 
     # создание списка заказов
