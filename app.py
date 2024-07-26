@@ -15,19 +15,6 @@ CORS(app)  # Разрешить CORS для всех маршрутов
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 
-@app.route('/test', methods=['GET'])
-def test():
-    url = "https://echo.free.beeceptor.com"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()  # Проверка на наличие ошибок HTTP
-        data = response.json()  # Предполагая, что ответ в формате JSON
-        return jsonify(data), 200
-    except requests.exceptions.RequestException as e:
-        print(f"error")
-        return jsonify({"error": str(e)}), 500
-
-
 # OAuth2
 @app.route('/auth', methods=['GET'])
 def auth():
@@ -46,7 +33,6 @@ def auth():
     }
 
     response = requests.post(url, data=data)
-    print(response.json())
 
     if response.status_code == 200:
         json_data = response.json()
@@ -485,98 +471,15 @@ def handle_message(message):
     except json.JSONDecodeError as e:
         print("Error decoding JSON:", e)
 
-
-# manage_platform
-@app.route('/manage_platform/<code>')
-def manage_platform(code):
-    # получение токена
-    auth = {
-        'application_id': application_id,
-        'application_secret': application_secret,
-        'code': code
-    }
-
-    concatenated_string = ':'.join([auth['application_id'], auth['application_secret'], auth['code']])
-    auth['verify'] = hashlib.md5(concatenated_string.encode()).hexdigest()
-
-    response = requests.post('https://joinposter.com/api/v2/auth/manage', data=auth)
-
-    if response.status_code == 200:
-        # получение данных
-        data = response.json()
-        poster_token = data['access_token']
-
-        # получение заказов
-        url = f"https://joinposter.com/api/dash.getTransactions?token={poster_token}&include_delivery=true&status=1&service_mode=3"
-        request_2 = requests.get(url)
-        response_2 = request_2.json()
-        response_2 = [item for item in response_2['response'] if item['processing_status'] == '40']
-
-        # создание списка заказов
-        orders = []
-        for d in response_2:
-            orders.append({
-                'transaction_id': d['transaction_id'],
-                'address1': d['delivery']['address1'],
-                'address2': d['delivery']['address2'],
-                'courier_id': d['delivery']['courier_id']
-            })
-
-        # запрос данных сотрудников
-        response = requests.get(f'https://joinposter.com/api/access.getEmployees?token={poster_token}')
-        employee_data = response.json().get('response', [])
-
-        # сопоставление данных сотрудников с заказами
-        for transaction in orders:
-            for employee in employee_data:
-                if transaction['courier_id'] == employee['user_id']:
-                    transaction['courier_name'] = employee['name']
-                    transaction['courier_login'] = employee['login']
-                    break
-            else:
-                transaction['courier_id'] = ''
-                transaction['courier_name'] = ''
-                transaction['courier_login'] = ''
-
-        # получение данных курьеров из базы данных
-        if orders:
-            database = sqlite3.connect('database.db')
-            cursor = database.cursor()
-            courier_logins = [order['courier_login'].split('@')[0] for order in orders if order['courier_login']]
-            query = "SELECT courier_id, lat, long FROM couriers WHERE courier_id IN ({})".format(
-                ','.join('?' * len(courier_logins))
-            )
-            cursor.execute(query, courier_logins)
-            couriers = cursor.fetchall()
-            cursor.close()
-
-            # создание словаря координат курьеров
-            courier_coords = {str(courier[0]): {'lat': courier[1], 'long': courier[2]} for courier in couriers}
-
-            # добавление координат курьеров к заказам
-            for order in orders:
-                courier_login = order['courier_login'].split('@')[0]
-                if courier_login in courier_coords:
-                    order['courier_lat'] = courier_coords[courier_login]['lat']
-                    order['courier_long'] = courier_coords[courier_login]['long']
-                else:
-                    order['courier_lat'] = ''
-                    order['courier_long'] = ''
-
-        # render_template
-        return render_template("index.html", data=orders)
-
-
 # manage_platform
 @app.route('/manage_platform_pos/<company_name>', methods=['GET'])
 def manage_platform_pos(company_name):
     token = get_token(company_name.lower())
-    # --------------------------------------------------------------------->
+
+    # API запрос для получения транзакций
     url = f"https://joinposter.com/api/dash.getTransactions?token={token}&include_delivery=true&status=1&service_mode=3"
     request_2 = requests.get(url)
-    print(request_2)
     response_2 = request_2.json()
-    print(response_2)
     response_2 = [item for item in response_2['response'] if item['processing_status'] == '40']
 
     # создание списка заказов
@@ -605,20 +508,12 @@ def manage_platform_pos(company_name):
             transaction['courier_name'] = ''
             transaction['courier_login'] = ''
 
-    # получение данных курьеров из базы данных
+    # получение данных курьеров из базы данных MongoDB
     if orders:
-        database = sqlite3.connect('database.db')
-        cursor = database.cursor()
         courier_logins = [order['courier_login'].split('@')[0] for order in orders if order['courier_login']]
-        query = "SELECT courier_id, lat, long FROM couriers WHERE courier_id IN ({})".format(
-            ','.join('?' * len(courier_logins))
-        )
-        cursor.execute(query, courier_logins)
-        couriers = cursor.fetchall()
-        cursor.close()
-
-        # создание словаря координат курьеров
-        courier_coords = {str(courier[0]): {'lat': courier[1], 'long': courier[2]} for courier in couriers}
+        couriers = couriers_collection.find({'courier_id': {'$in': courier_logins}})
+        courier_coords = {courier['courier_id']: {'lat': courier['lat'], 'long': courier['long']} for courier in
+                          couriers}
 
         # добавление координат курьеров к заказам
         for order in orders:
@@ -629,8 +524,6 @@ def manage_platform_pos(company_name):
             else:
                 order['courier_lat'] = ''
                 order['courier_long'] = ''
-
-    # render_template
 
     return render_template("index.html", data=orders)
 
@@ -686,7 +579,8 @@ def order_close():
 def update(data):
     company_name = data.get("company_name")
     token = get_token(company_name.lower())
-    # --------------------------------------------------------------------->
+
+    # API запрос для получения транзакций
     url = f"https://joinposter.com/api/dash.getTransactions?token={token}&include_delivery=true&status=1&service_mode=3"
     request_2 = requests.get(url)
     response_2 = request_2.json()
@@ -718,20 +612,12 @@ def update(data):
             transaction['courier_name'] = ''
             transaction['courier_login'] = ''
 
-    # получение данных курьеров из базы данных
+    # получение данных курьеров из базы данных MongoDB
     if orders:
-        database = sqlite3.connect('database.db')
-        cursor = database.cursor()
         courier_logins = [order['courier_login'].split('@')[0] for order in orders if order['courier_login']]
-        query = "SELECT courier_id, lat, long FROM couriers WHERE courier_id IN ({})".format(
-            ','.join('?' * len(courier_logins))
-        )
-        cursor.execute(query, courier_logins)
-        couriers = cursor.fetchall()
-        cursor.close()
-
-        # создание словаря координат курьеров
-        courier_coords = {str(courier[0]): {'lat': courier[1], 'long': courier[2]} for courier in couriers}
+        couriers = couriers_collection.find({'courier_id': {'$in': courier_logins}})
+        courier_coords = {courier['courier_id']: {'lat': courier['lat'], 'long': courier['long']} for courier in
+                          couriers}
 
         # добавление координат курьеров к заказам
         for order in orders:
