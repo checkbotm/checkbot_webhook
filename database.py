@@ -1,80 +1,54 @@
-import sqlite3
+from pymongo.mongo_client import MongoClient
+from urllib.parse import quote_plus
+
+# Экранирование пароля
+password = quote_plus("7F2aWCZTjhksWSIJ")  # Замените "your_password" на ваш реальный пароль
+
+# Создание URI с экранированным паролем и параметром tls=true
+uri = f"mongodb+srv://abushukurov0806:{password}@test.vtvgsul.mongodb.net/?retryWrites=true&w=majority"
+
+# Создание нового клиента и подключение к серверу
+client = MongoClient(uri)
+
+# Выбор базы данных
+db = client['database']
+
+# Определение коллекций
+tokens_collection = db['tokens']
+couriers_collection = db['couriers']
 
 
-def create_tables():
-    database = sqlite3.connect('database.db')
-    cursor = database.cursor()
-
-    # Create tokens table if it does not exist
-    cursor.execute('''CREATE TABLE IF NOT EXISTS tokens
-                      (id INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT UNIQUE, token TEXT)''')
-
-    # Create couriers table if it does not exist
-    cursor.execute('''CREATE TABLE IF NOT EXISTS couriers
-                      (courier_id INTEGER PRIMARY KEY, lat REAL, long REAL)''')
-
-    database.commit()
-    database.close()
-
-# save_token
+# Сохранение токена
 def save_token(account, token):
-    database = sqlite3.connect('database.db')
-    cursor = database.cursor()
-    cursor.execute("INSERT OR REPLACE INTO tokens (account, token) VALUES (?, ?)", (account, token))
-    database.commit()
-    database.close()
+    tokens_collection.update_one(
+        {'account': account},
+        {'$set': {'token': token}},
+        upsert=True
+    )
 
-
-# get_token
+# Получение токена
 def get_token(account):
-    database = sqlite3.connect('database.db')
-    cursor = database.cursor()
-    cursor.execute("SELECT token FROM tokens WHERE account=?", (account,))
-    token_row = cursor.fetchone()
-    cursor.close()
+    token_document = tokens_collection.find_one({'account': account})
+    if token_document:
+        return token_document.get('token', '')
+    return ' '
 
-    if token_row:
-        return token_row[0]
-    else:
-        return " "
-
-
-# save_or_update_courier
+# Сохранение или обновление курьера
 def save_or_update_courier(courier_id, lat, long):
-    database = sqlite3.connect('database.db')
-    cursor = database.cursor()
+    couriers_collection.update_one(
+        {'courier_id': courier_id},
+        {'$set': {'lat': lat, 'long': long}},
+        upsert=True
+    )
 
-    # Check if the courier already exists
-    cursor.execute("SELECT courier_id FROM couriers WHERE courier_id=?", (courier_id,))
-    existing_courier = cursor.fetchone()
-
-    if existing_courier:
-        # Update the existing courier
-        cursor.execute("UPDATE couriers SET lat=?, long=? WHERE courier_id=?", (lat, long, courier_id))
-    else:
-        # Insert a new courier
-        cursor.execute("INSERT INTO couriers (courier_id, lat, long) VALUES (?, ?, ?)", (courier_id, lat, long))
-
-    database.commit()
-    database.close()
-
-
-
-# get_courier
+# Получение курьера
 def get_courier(courier_id):
-    database = sqlite3.connect('database.db')
-    cursor = database.cursor()
-    cursor.execute("SELECT courier_id, lat, long FROM couriers WHERE courier_id=?", (courier_id,))
-    courier_row = cursor.fetchone()
-    cursor.close()
-
-    if courier_row:
+    courier_document = couriers_collection.find_one({'courier_id': courier_id})
+    if courier_document:
         return {
-            "courier_id": courier_row[0],
-            "lat": courier_row[1],
-            "long": courier_row[2]
+            "courier_id": courier_document.get('courier_id'),
+            "lat": courier_document.get('lat'),
+            "long": courier_document.get('long')
         }
-    else:
-        return None
+    return None
 
-create_tables()
