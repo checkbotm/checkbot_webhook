@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, jsonify, request, render_template, redirect
 from flask_socketio import SocketIO, emit
 import requests
@@ -12,7 +15,7 @@ from configs import *
 app = Flask(__name__)
 # socketio = SocketIO(app)
 CORS(app)  # Разрешить CORS для всех маршрутов
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 
 
 # OAuth2
