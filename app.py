@@ -636,4 +636,4 @@ def update(data):
 
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, ping_timeout=600, ping_interval=25)
